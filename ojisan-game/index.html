@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>おじさんジャンプ</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container" class="time-morning">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div id="start-screen" class="screen active">
+                <h1>おじさんジャンプ</h1>
+                <p>スペースキーでジャンプ、下矢印でしゃがむ</p>
+                <button id="start-btn">スタート</button>
+            </div>
+            <div id="game-over-screen" class="screen">
+                <h2>ゲームオーバー</h2>
+                <p>スコア: <span id="final-score">0</span>m</p>
+                <button id="restart-btn">もう一度</button>
+            </div>
+            <div id="game-clear-screen" class="screen">
+                <h2 class="spinning-goal">ゴール！</h2>
+                <p>ステージクリア！ スコア: <span id="clear-score">0</span>m</p>
+                <button id="next-stage-btn">次のステージへ</button>
+                <button id="next-btn" style="display:none;">タイトルへ</button>
+            </div>
+            <div id="hud">
+                <div id="score-display">距離: 0m</div>
+                <div id="progress-container">
+                    <div id="progress-bar"></div>
+                </div>
+                <div id="stage-display">ステージ 1</div>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
