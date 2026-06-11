@@ -711,8 +711,8 @@ function checkCollisions() {
     
     // Goal Collision
     if (goalPost) {
-        if (player.x < goalPost.x + goalPost.w && player.x + player.width > goalPost.x &&
-            player.y < goalPost.y + goalPost.h && player.y + player.height > goalPost.y) {
+        // Y座標（高さ）に関係なく、ゴールのX座標に到達したらクリアとする
+        if (player.x + player.width > goalPost.x) {
             gameClear();
         }
     }
