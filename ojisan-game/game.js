@@ -42,8 +42,10 @@ let keys = {};
 let prevKeys = {};
 window.addEventListener('keydown', e => { 
     keys[e.code] = true; 
+    
     // エンターキーですぐに再開・次へ進む
-    if (e.code === 'Enter') {
+    // e.key === 'Enter' または e.code === 'Enter' の両方に対応
+    if (e.key === 'Enter' || e.code === 'Enter') {
         if (isGameOver) {
             init('restart_stage');
         } else if (isGameClear) {
@@ -113,10 +115,15 @@ class Player {
         }
 
         // ジャンプ処理
-        if (actionJump && !this.isDucking && this.jumpsLeft > 0) {
+        if (actionJump && this.jumpsLeft > 0) {
             this.vy = this.jumpForce;
             this.grounded = false;
             this.jumpsLeft--;
+        }
+
+        // 急降下（空中で下を押すと素早く落ちる）
+        if (!this.grounded && actionDuck) {
+            this.vy += 1.5;
         }
 
         this.vy += gravity;
@@ -418,6 +425,38 @@ class Poison {
     }
 }
 
+class Bird {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 30;
+        this.h = 20;
+        this.active = true;
+        this.speed = Math.random() * 2 + 2; // 少し速い
+    }
+    update() { this.x -= (gameSpeed + this.speed); }
+    draw() {
+        if (!this.active) return;
+        let time = Date.now() / 100;
+        let flap = Math.sin(time * 3) * 10;
+        ctx.fillStyle = '#111'; // 黒いカラス
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        // 羽
+        ctx.beginPath();
+        ctx.moveTo(this.x + 15, this.y + 10);
+        ctx.lineTo(this.x + 10, this.y - flap);
+        ctx.lineTo(this.x + 20, this.y - flap);
+        ctx.fill();
+        // くちばし
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y + 10);
+        ctx.lineTo(this.x - 10, this.y + 12);
+        ctx.lineTo(this.x, this.y + 15);
+        ctx.fill();
+    }
+}
+
 class BoostPad {
     constructor(x, y) {
         this.x = x;
@@ -501,6 +540,7 @@ let spikes = [];
 let boostPads = [];
 let firebars = [];
 let poisons = [];
+let birds = [];
 let goalPost = null;
 let goalSpawned = false;
 let poisonTimer = 0;
@@ -513,7 +553,7 @@ function init(action = 'restart_all') {
     }
     // 'restart_stage' の場合は currentStage をそのまま維持
     
-    stageGoalDistance = 1000 + (currentStage - 1) * 200; // Stage 1: 1000m, Stage 2: 1200m...
+    stageGoalDistance = 1000; // 全ステージで距離を統一
     stageDisplay.innerText = `ステージ ${currentStage}`;
     progressBar.style.width = '0%';
     
@@ -524,6 +564,7 @@ function init(action = 'restart_all') {
     boostPads = [];
     firebars = [];
     poisons = [];
+    birds = [];
     goalPost = null;
     goalSpawned = false;
     
@@ -584,39 +625,50 @@ function spawnLevelChunks() {
     let h = Math.random() * (maxH - minH) + minH;
     let y = canvas.height - h;
     
-    let isCrumbling = false;
-    // 崩れる足場: ステージ1の中盤以降から
-    if ((currentStage > 1 || score > 500) && Math.random() < 0.3) isCrumbling = true;
+    // 崩れる足場: ステージ1の中盤以降から（ステージが進むと確率アップ）
+    let crumbleChance = 0.3 + (currentStage - 1) * 0.1;
+    if ((currentStage > 1 || score > 500) && Math.random() < Math.min(crumbleChance, 0.7)) isCrumbling = true;
     
     let newBuilding = new Building(lastBuilding.x + lastBuilding.w + gap, y, w, h, isCrumbling);
     buildings.push(newBuilding);
     
-    // トゲトゲ: ステージ1の序盤以降から
-    if ((currentStage > 1 || score > 200) && Math.random() < 0.5 && gap > 150) {
+    // トゲトゲ: ステージが進むと確率アップ
+    let spikeChance = 0.5 + (currentStage - 1) * 0.05;
+    if ((currentStage > 1 || score > 200) && Math.random() < Math.min(spikeChance, 0.8) && gap > 150) {
         let spikeY = Math.max(lastBuilding.y, newBuilding.y) + 40; 
         if (spikeY > canvas.height - 30) spikeY = canvas.height - 30;
         spikes.push(new Spike(lastBuilding.x + lastBuilding.w + 10, spikeY, gap - 20));
     }
     
-    // 加速パネル: ステージ1の終盤以降から
+    // 加速パネル
     if ((currentStage > 1 || score > 700) && Math.random() < 0.2 && !isCrumbling) {
         boostPads.push(new BoostPad(newBuilding.x + w/2 - 30, newBuilding.y - 10));
     }
     
-    // 毒: ステージ2以降から
-    if ((currentStage > 1 || score > 800) && Math.random() < 0.15) {
+    // 毒: ステージ2以降から確率アップ
+    let poisonChance = 0.15 + (currentStage - 1) * 0.05;
+    if ((currentStage > 1 || score > 800) && Math.random() < Math.min(poisonChance, 0.4)) {
         poisons.push(new Poison(newBuilding.x + w/2 + 20, newBuilding.y - 50));
     }
     
-    // ファイアバー: ステージ2以降から
-    if (currentStage >= 2 && Math.random() < 0.25) {
+    // ファイアバー: ステージ2以降から確率アップ
+    let fireChance = 0.25 + (currentStage - 1) * 0.1;
+    if (currentStage >= 2 && Math.random() < Math.min(fireChance, 0.6)) {
         firebars.push(new Firebar(newBuilding.x + w/2, newBuilding.y - 60, 150));
     }
     
-    // 飛んでくる障害物
-    if ((currentStage > 1 || score > 100) && Math.random() < 0.3) {
+    // 飛んでくる障害物: ステージが進むと確率アップ
+    let obstacleChance = 0.3 + (currentStage - 1) * 0.1;
+    if ((currentStage > 1 || score > 100) && Math.random() < Math.min(obstacleChance, 0.6)) {
         let obY = newBuilding.y - player.duckHeight - 15; 
         obstacles.push(new Obstacle(newBuilding.x + w/2, obY));
+    }
+    
+    // カラス（鳥）: ステージ3以降から登場
+    let birdChance = 0.2 + (currentStage - 3) * 0.1;
+    if (currentStage >= 3 && Math.random() < Math.min(birdChance, 0.6)) {
+        let birdY = canvas.height - 100 - Math.random() * 150;
+        birds.push(new Bird(lastBuilding.x + lastBuilding.w + 200, birdY));
     }
 }
 
@@ -667,6 +719,13 @@ function checkCollisions() {
             player.y + player.height > s.y - 20) gameOver();
     }
     
+    for (let b of birds) {
+        if (b.active && player.x < b.x + b.w && player.x + player.width > b.x &&
+            player.y < b.y + b.h && player.y + player.height > b.y) {
+            gameOver();
+        }
+    }
+
     for (let p of boostPads) {
         if (p.active && player.x < p.x + p.w && player.x + player.width > p.x &&
             player.y + player.height >= p.y - 10 && player.y + player.height <= p.y + p.h + 10) {
@@ -740,21 +799,30 @@ function updateDifficultyAndTime() {
     baseGameSpeed = targetBaseSpeed;
 
     if (poisonTimer > 0) poisonTimer--;
+    if (boostTimer > 0) boostTimer--;
+
+    // 毒状態の場合は操作反転
+    let isBraking = false;
+    let isDashing = false;
+    if (poisonTimer > 0) {
+        isBraking = keys['ArrowRight'] || keys['KeyD'];
+        isDashing = keys['ArrowLeft'] || keys['KeyA'];
+    } else {
+        isBraking = keys['ArrowLeft'] || keys['KeyA'];
+        isDashing = keys['ArrowRight'] || keys['KeyD'];
+    }
 
     if (boostTimer > 0) {
-        gameSpeed = baseGameSpeed * 1.8;
-        boostTimer--;
-    } else {
-        // 毒状態の場合は操作反転（右キーでブレーキ）
-        let isBraking = false;
-        if (poisonTimer > 0) {
-            isBraking = keys['ArrowRight'] || keys['KeyD'];
+        if (isBraking) {
+            gameSpeed = baseGameSpeed * 0.8; // 加速中もブレーキで減速可能
         } else {
-            isBraking = keys['ArrowLeft'] || keys['KeyA'];
+            gameSpeed = baseGameSpeed * 1.8;
         }
-
+    } else {
         if (isBraking) {
             gameSpeed = baseGameSpeed * 0.6;
+        } else if (isDashing) {
+            gameSpeed = baseGameSpeed * 1.4;
         } else {
             gameSpeed = baseGameSpeed;
         }
@@ -787,7 +855,8 @@ function loop() {
         { array: obstacles, drawFunc: 'draw', updateFunc: 'update' },
         { array: boostPads, drawFunc: 'draw', updateFunc: 'update' },
         { array: firebars, drawFunc: 'draw', updateFunc: 'update' },
-        { array: poisons, drawFunc: 'draw', updateFunc: 'update' }
+        { array: poisons, drawFunc: 'draw', updateFunc: 'update' },
+        { array: birds, drawFunc: 'draw', updateFunc: 'update' }
     ];
     
     for (let ent of entities) {
@@ -819,6 +888,14 @@ function loop() {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 30px sans-serif';
         ctx.fillText('操作反転中！', canvas.width/2 - 80, 100);
+    }
+    
+    // 加速のカウントダウン表示
+    if (boostTimer > 0) {
+        let secondsLeft = (boostTimer / 60).toFixed(1);
+        ctx.fillStyle = '#00FFFF';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.fillText(`加速中: ${secondsLeft}秒`, canvas.width/2 - 80, 150);
     }
 
     animationId = requestAnimationFrame(loop);
